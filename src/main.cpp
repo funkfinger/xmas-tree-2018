@@ -1,32 +1,62 @@
-#include <Arduino.h>
+// code based on https://gist.github.com/kriegsman/1f7ccbbfa492a73c015e
+
 #include <FastLED.h>
 
-FASTLED_USING_NAMESPACE
-
-// FastLED "100-lines-of-code" demo reel, showing just a few 
-// of the kinds of animation patterns you can quickly and easily 
-// compose using FastLED.  
-//
-// This example also shows one easy way to define multiple 
-// animations patterns and have them automatically rotate.
-//
-// -Mark Kriegsman, December 2014
-
-#if defined(FASTLED_VERSION) && (FASTLED_VERSION < 3001000)
-#warning "Requires FastLED 3.1 or later; check github for latest code."
-#endif
-
-#define BRIGHTNESS          128
+#define BRIGHTNESS          255
 #define FRAMES_PER_SECOND  120
 
 #define NUM_LEDS 419
 #define DATA_PIN 6
 
-#define  CURRENT_LEVEL 13
-#define LEVELS 12
+#define LED_TYPE    WS2811
+#define COLOR_ORDER RGB
+CRGB leds[NUM_LEDS];
 
-CRGBPalette16 currentPalette;
-TBlendType    currentBlending;
+#define UPDATES_PER_SECOND 40
+
+CRGBPalette16 currentPalette( CRGB::Black);
+CRGBPalette16 targetPalette( PartyColors_p );
+
+void setup() {
+  delay( 1000 ); // power-up safety delay
+  FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.setBrightness(  BRIGHTNESS );
+}
+
+void ChangePalettePeriodically() {
+  uint8_t secondHand = (millis() / 1000) % 60;
+  static uint8_t lastSecond = 99;
+  
+  if( lastSecond != secondHand) {
+    lastSecond = secondHand;
+    CRGB p = CHSV( HUE_PURPLE, 255, 255);
+    CRGB g = CHSV( HUE_GREEN, 255, 255);
+    CRGB r = CHSV( HUE_RED, 255, 255);
+    CRGB b = CRGB::Black;
+    CRGB w = CRGB::White;
+    if( secondHand ==  0)  { targetPalette = RainbowColors_p; }
+    // if( secondHand == 10)  { targetPalette = CRGBPalette16( g,g,b,b, p,p,b,b, g,g,b,b, p,p,b,b); }
+    if( secondHand == 20)  { targetPalette = CRGBPalette16( r,r,r,r, r,w,w,g, g,g,g,g, g,w,w,r); }
+    //if( secondHand == 30)  { targetPalette = bhw2_xmas_gp; }
+    if( secondHand == 40)  { targetPalette = CloudColors_p; }
+    // if( secondHand == 50)  { targetPalette = PartyColors_p; }
+  }
+}
+
+void FillLEDsFromPaletteColors( uint8_t colorIndex) {
+  uint8_t brightness = 255;
+  
+  for( int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = ColorFromPalette( currentPalette, colorIndex + sin8(i*16), brightness);
+    colorIndex += 3;
+  }
+}
+
+//glitter effect
+void addGlitter( fract8 chanceOfGlitter) {
+  if( random8() < chanceOfGlitter) {
+    leds[ random16(NUM_LEDS) ] += CRGB::White;}
+}
 
 int levels[][2] = {
   {0,75},
@@ -45,73 +75,41 @@ int levels[][2] = {
   {0, 419},
 };
 
-CRGB leds[NUM_LEDS];
-
-void addGlitter( fract8 chanceOfGlitter) {
-  if( random8() < chanceOfGlitter) {
-    leds[ random16(NUM_LEDS) ] += CRGB::White;
-  }
-}
-
-void setup() {
-	delay(3000); // 3 second delay for recovery
-  FastLED.addLeds<WS2811, DATA_PIN, RGB>(leds, NUM_LEDS);
-	FastLED.setBrightness(BRIGHTNESS);
-  currentPalette = PartyColors_p;
-  currentPalette = CloudColors_p;
-  currentBlending = LINEARBLEND;
-
-}
-
-static uint8_t hue = 0;
-
-void rainbowSweepUp() {
-  while(1) {
-    for( uint8_t l =0; l<LEVELS; l++ ) {
-      for ( int i=levels[l][0]; i<levels[l][1]; i++) {
-        // leds[i] = CHSV(hue, 255, 255);
-        leds[i] = ColorFromPalette( currentPalette, hue, 255, currentBlending);
-      }
-      hue += 1;
-    }
-    FastLED.show();
-    FastLED.delay(1000/FRAMES_PER_SECOND);
-    // delay(100);
-  }
-}
-
-void xmasColors1() {
-  uint16_t color = 0x0000FF;
-  while(1) {
-    if (color == 0x0000FF) color = 0xFF0000;
-    if (color == 0xFF0000) color = 0x00FF00;
-    if (color == 0x00FF00) color = 0x0000FF;
-    for( uint8_t l =0; l<LEVELS; l++ ) {
-      for ( int i=levels[l][0]; i<levels[l][1]; i++) {
-        leds[i] = color;
-      }
-    }
-    FastLED.show();
-    FastLED.delay(1000/FRAMES_PER_SECOND);
-    delay(50);
-  }
-}
-
-
 void loop() {
 
-  static uint8_t startIndex = 0;
-  startIndex = startIndex + 2; /* higher = faster motion */
+  ChangePalettePeriodically();
+  uint8_t maxChanges = 40; //   - meaningful values are 1-48.  1=veeeeeeeery slow, 48=quickest
+  nblendPaletteTowardPalette( currentPalette, targetPalette, maxChanges);
 
-  fill_palette( leds, NUM_LEDS, 
-    startIndex, 1, /* higher = narrower stripes */ 
-    currentPalette, 255, LINEARBLEND);
+  static uint8_t startIndex = 0;
+  startIndex = startIndex - 8; /* motion speed */
+  static uint8_t numOfPaletteRepeats = 1;
+  static uint8_t paletteBrightness = 180;
+
+  // FillLEDsFromPaletteColors( startIndex);
+  fill_palette (leds, NUM_LEDS, startIndex, numOfPaletteRepeats, currentPalette, paletteBrightness, LINEARBLEND);
+
+  addGlitter(30);
 
   FastLED.show();
-  FastLED.delay(1000 / 60);
-  
-  // rainbowSweepUp();
-  // xmasColors1();
+  FastLED.delay(1000 / UPDATES_PER_SECOND);
 }
 
+
+
+void testDisplay1() {
+  static uint8_t palettePosition = 0;
+  while(true) {
+    for(uint8_t i=0; i<14; i++) {
+      for(int j=levels[i][0]; j<levels[i][1]; j++) {
+        // leds[j].setHSV( palettePosition, 255, 255);
+        leds[j] = ColorFromPalette(RainbowColors_p, palettePosition, 128, LINEARBLEND);
+      }
+      palettePosition = palettePosition + (254/14);
+      FastLED.show();
+      FastLED.delay(100);
+    }
+    palettePosition = palettePosition - (254/14);
+  }
+}
 

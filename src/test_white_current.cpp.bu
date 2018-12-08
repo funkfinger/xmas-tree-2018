@@ -1,0 +1,36 @@
+// code based on https://gist.github.com/kriegsman/1f7ccbbfa492a73c015e
+
+#include <FastLED.h>
+
+#define BRIGHTNESS          0
+#define FRAMES_PER_SECOND  120
+
+#define NUM_LEDS 419
+#define DATA_PIN 6
+
+#define LED_TYPE    WS2811
+#define COLOR_ORDER RGB
+CRGB leds[NUM_LEDS];
+
+#define UPDATES_PER_SECOND 100
+
+
+void setup() {
+  delay( 1000 ); // power-up safety delay
+  FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.setBrightness(  BRIGHTNESS );
+}
+
+void loop() {
+  fill_solid( leds, NUM_LEDS, CRGB( 255, 255, 255) );
+  for (int i=0; i<254; i++) {
+    FastLED.setBrightness(  i );
+    FastLED.show();
+    delay(500);
+  }
+}
+
+
+
+
+
