@@ -33,3 +33,5 @@
 
 .pioenvs
 .piolibdeps
+.pio
+.DS_Store
