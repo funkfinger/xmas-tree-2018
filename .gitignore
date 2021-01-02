@@ -35,3 +35,4 @@
 .piolibdeps
 .pio
 .DS_Store
+src/settings.h
